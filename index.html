@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Bloons TD 6 Minimal Clone</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            user-select: none;
+        }
+        #game-container {
+            display: flex;
+            background: #162447;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            gap: 15px;
+        }
+        #canvas-wrapper {
+            position: relative;
+        }
+        canvas {
+            background: #228b22;
+            border-radius: 6px;
+            display: block;
+            cursor: crosshair;
+        }
+        #sidebar {
+            width: 240px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: #1f4068;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .stats-panel {
+            background: #162447;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+        .stats-panel div {
+            display: flex;
+            justify-content: space-between;
+        }
+        .stat-val {
+            font-weight: bold;
+            color: #e43f5a;
+        }
+        .shop-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            color: #00fff0;
+            border-bottom: 1px solid #162447;
+            padding-bottom: 5px;
+        }
+        .shop-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        .shop-item {
+            background: #162447;
+            border: 2px solid transparent;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s;
+        }
+        .shop-item:hover {
+            background: #0f1b29;
+            border-color: #00fff0;
+        }
+        .shop-item.selected {
+            border-color: #e43f5a;
+            background: #0f1b29;
+        }
+        .shop-item .name { font-weight: bold; font-size: 13px; }
+        .shop-item .cost { color: #ffd700; font-size: 12px; font-weight: bold; }
+        
+        #upgrade-panel {
+            background: #162447;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+        }
+        .upgrade-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #00fff0;
+            margin-bottom: 8px;
+        }
+        .upgrade-btn {
+            background: #e43f5a;
+            border: none;
+            color: #fff;
+            width: 100%;
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .upgrade-btn:hover:not(:disabled) { background: #ff4a6b; }
+        .upgrade-btn:disabled { background: #444; cursor: not-allowed; }
+
+        #controls {
+            margin-top: auto;
+        }
+        .control-btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            background: #00fff0;
+            color: #162447;
+            transition: background 0.2s;
+        }
+        .control-btn:hover { background: #00cccc; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas" width="750" height="550"></canvas>
+    </div>
+    <div id="sidebar">
+        <div>
+            <div class="stats-panel">
+                <div>Cash: <span id="cash-val" class="stat-val" style="color:#ffd700;">$650</span></div>
+                <div>Lives: <span id="lives-val" class="stat-val" style="color:#ff4a6b;">100</span></div>
+                <div>Round: <span id="round-val" class="stat-val" style="color:#00fff0;">1</span></div>
+            </div>
+
+            <div class="shop-title">Buy Towers</div>
+            <div class="shop-grid">
+                <div class="shop-item" onclick="selectTowerShop('dart')">
+                    <span class="name">🎯 Dart Monkey</span>
+                    <span class="cost">$200</span>
+                </div>
+                <div class="shop-item" onclick="selectTowerShop('bomb')">
+                    <span class="name">💣 Bomb Shooter</span>
+                    <span class="cost">$525</span>
+                </div>
+                <div class="shop-item" onclick="selectTowerShop('super')">
+                    <span class="name">🦸 Super Monkey</span>
+                    <span class="cost">$2500</span>
+                </div>
+            </div>
+
+            <div id="upgrade-panel">
+                <div class="upgrade-title" id="selected-tower-name">Selected Tower</div>
+                <div>Kills: <span id="selected-tower-kills">0</span></div>
+                <button class="upgrade-btn" id="up-path1" onclick="upgradeSelected(1)">Path 1: More Range ($150)</button>
+                <button class="upgrade-btn" id="up-path2" onclick="upgradeSelected(2)">Path 2: Attack Speed ($200)</button>
+            </div>
+        </div>
+
+        <div id="controls">
+            <button class="control-btn" id="start-btn" onclick="startRound()">START ROUND</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game State
+let cash = 650;
+let lives = 100;
+let round = 1;
+let roundInProgress = false;
+let activeShopSelection = null;
+let selectedPlacedTower = null;
+
+// Map Path
+const path = [
+    {x: -20, y: 120},
+    {x: 250, y: 120},
+    {x: 250, y: 420},
+    {x: 500, y: 420},
+    {x: 500, y: 220},
+    {x: 770, y: 220}
+];
+
+// Entities
+let enemies = [];
+let towers = [];
+let projectiles = [];
+let particles = [];
+
+// Tower Configurations
+const TOWER_TYPES = {
+    dart: { name: 'Dart Monkey', cost: 200, range: 110, cooldown: 35, color: '#b5651d', type: 'dart' },
+    bomb: { name: 'Bomb Shooter', cost: 525, range: 130, cooldown: 65, color: '#4a5568', type: 'bomb' },
+    super: { name: 'Super Monkey', cost: 2500, range: 160, cooldown: 6, color: '#f6e05e', type: 'super' }
+};
+
+// Bloon Specifications (Layer properties mimicking real health logic)
+const BLOON_TYPES = [
+    { name: 'Red', speed: 1.4, color: '#ff4a6b', child: null, cash: 1, damage: 1 },
+    { name: 'Blue', speed: 1.8, color: '#3182ce', child: 0, cash: 1, damage: 2 },
+    { name: 'Green', speed: 2.2, color: '#38a169', child: 1, cash: 1, damage: 3 },
+    { name: 'Yellow', speed: 4.0, color: '#ecc94b', child: 2, cash: 1, damage: 4 },
+    { name: 'Pink', speed: 4.8, color: '#ed64a6', child: 3, cash: 1, damage: 5 },
+    { name: 'Ceramic', speed: 3.0, color: '#a0aec0', child: 4, cash: 2, damage: 15, hp: 10 }
+];
+
+// Rounds Spawning Definitions
+const ROUND_DATA = [
+    { reds: 20, blues: 0, greens: 0, yellows: 0, pinks: 0, ceramics: 0 },
+    { reds: 35, blues: 10, greens: 0, yellows: 0, pinks: 0, ceramics: 0 },
+    { reds: 20, blues: 25, greens: 15, yellows: 0, pinks: 0, ceramics: 0 },
+    { reds: 0, blues: 30, greens: 25, yellows: 10, pinks: 0, ceramics: 0 },
+    { reds: 0, blues: 0, greens: 30, yellows: 20, pinks: 8, ceramics: 0 },
+    { reds: 0, blues: 0, greens: 0, yellows: 30, pinks: 25, ceramics: 1 }
+];
+
+// Mouse Handling
+let mouseX = 0;
+let mouseY = 0;
+
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+});
+
+canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Handle tower placement
+    if (activeShopSelection) {
+        const config = TOWER_TYPES[activeShopSelection];
+        if (cash >= config.cost) {
+            towers.push({
+                x, y,
+                ...JSON.parse(JSON.stringify(config)),
+                path1: 0,
+                path2: 0,
+                lastShot: 0,
+                kills: 0,
+                baseRange: config.range,
+                baseCooldown: config.cooldown
+            });
+            cash -= config.cost;
+            activeShopSelection = null;
+            clearShopSelectionUI();
+            updateUI();
+        }
+        return;
+    }
+
+    // Select existing tower
+    let clickedTower = null;
+    for (let t of towers) {
+        if (Math.hypot(t.x - x, t.y - y) < 22) {
+            clickedTower = t;
+            break;
+        }
+    }
+
+    selectedPlacedTower = clickedTower;
+    updateUpgradePanel();
+});
+
+function selectTowerShop(type) {
+    if (cash >= TOWER_TYPES[type].cost) {
+        activeShopSelection = type;
+        selectedPlacedTower = null;
+        updateUpgradePanel();
+        
+        const items = document.querySelectorAll('.shop-item');
+        items.forEach(el => el.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+    }
+}
+
+function clearShopSelectionUI() {
+    document.querySelectorAll('.shop-item').forEach(el => el.classList.remove('selected'));
+}
+
+function updateUI() {
+    document.getElementById('cash-val').innerText = `$${cash}`;
+    document.getElementById('lives-val').innerText = lives;
+    document.getElementById('round-val').innerText = round;
+}
+
+function updateUpgradePanel() {
+    const panel = document.getElementById('upgrade-panel');
+    if (!selectedPlacedTower) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = 'block';
+    document.getElementById('selected-tower-name').innerText = selectedPlacedTower.name;
+    document.getElementById('selected-tower-kills').innerText = selectedPlacedTower.kills;
+
+    const p1Cost = 150 + (selectedPlacedTower.path1 * 120);
+    const p2Cost = 200 + (selectedPlacedTower.path2 * 150);
+
+    const btn1 = document.getElementById('up-path1');
+    const btn2 = document.getElementById('up-path2');
+
+    if (selectedPlacedTower.path1 >= 3) {
+        btn1.innerText = "Path 1: MAXED";
+        btn1.disabled = true;
+    } else {
+        btn1.innerText = `Path 1: More Range ($${p1Cost})`;
+        btn1.disabled = cash < p1Cost;
+    }
+
+    if (selectedPlacedTower.path2 >= 3) {
+        btn2.innerText = "Path 2: Speed ($0)";
+        btn2.disabled = true;
+    } else {
+        btn2.innerText = `Path 2: Attack Speed ($${p2Cost})`;
+        btn2.disabled = cash < p2Cost;
+    }
+}
+
+function upgradeSelected(pathNum) {
+    if (!selectedPlacedTower) return;
+    if (pathNum === 1) {
+        const cost = 150 + (selectedPlacedTower.path1 * 120);
+        if (cash >= cost && selectedPlacedTower.path1 < 3) {
+            cash -= cost;
+            selectedPlacedTower.path1++;
+            selectedPlacedTower.range += 25;
+        }
+    } else {
+        const cost = 200 + (selectedPlacedTower.path2 * 150);
+        if (cash >= cost && selectedPlacedTower.path2 < 3) {
+            cash -= cost;
+            selectedPlacedTower.path2++;
+            selectedPlacedTower.cooldown = Math.floor(selectedPlacedTower.cooldown * 0.7);
+        }
+    }
+    updateUI();
+    updateUpgradePanel();
+}
+
+function startRound() {
+    if (roundInProgress) return;
+    roundInProgress = true;
+    document.getElementById('start-btn').disabled = true;
+    document.getElementById('start-btn').innerText = "ROUND RUNNING";
+
+    const rData = ROUND_DATA[Math.min(round - 1, ROUND_DATA.length - 1)];
+    
+    // Scale indefinitely if past predefined rounds
+    let multiplier = round > ROUND_DATA.length ? (round - ROUND_DATA.length) : 0;
+    let spawnQueue = [];
+
+    // Queue up Bloons
+    for (let i = 0; i < (rData.reds + multiplier * 5); i++) spawnQueue.push(0);
+    for (let i = 0; i < (rData.blues + multiplier * 3); i++) spawnQueue.push(1);
+    for (let i = 0; i < (rData.greens + multiplier * 2); i++) spawnQueue.push(2);
+    for (let i = 0; i < rData.yellows; i++) spawnQueue.push(3);
+    for (let i = 0; i < rData.pinks; i++) spawnQueue.push(4);
+    for (let i = 0; i < (rData.ceramics + Math.floor(multiplier / 2)); i++) spawnQueue.push(5);
+
+    // Shuffle slightly
+    spawnQueue.sort(() => Math.random() - 0.5);
+
+    let idx = 0;
+    const spawner = setInterval(() => {
+        if (lives <= 0) { clearInterval(spawner); return; }
+        if (idx >= spawnQueue.length) {
+            clearInterval(spawner);
+            checkRoundEnd();
+            return;
+        }
+        createBloon(spawnQueue[idx]);
+        idx++;
+    }, Math.max(200, 600 - (round * 30)));
+}
+
+function createBloon(typeIndex, customX = null, customY = null, targetNode = 1) {
+    const base = BLOON_TYPES[typeIndex];
+    enemies.push({
+        x: customX !== null ? customX : path[0].x,
+        y: customY !== null ? customY : path[0].y,
+        typeIndex: typeIndex,
+        speed: base.speed,
+        color: base.color,
+        hp: base.hp || 1,
+        targetNode: targetNode,
+        distanceTraveled: 0
+    });
+}
+
+function checkRoundEnd() {
+    const checker = setInterval(() => {
+        if (enemies.length === 0 && roundInProgress) {
+            clearInterval(checker);
+            roundInProgress = false;
+            cash += 100 + round * 10; // End of round cash bonus
+            round++;
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('start-btn').innerText = "START ROUND";
+            updateUI();
+        }
+    }, 500);
+}
+
+function damageBloon(enemy, damage) {
+    enemy.hp -= damage;
+    if (enemy.hp <= 0) {
+        cash += BLOON_TYPES[enemy.typeIndex].cash;
+        const childIdx = BLOON_TYPES[enemy.typeIndex].child;
+        
+        // Spawn pop particles
+        for(let i=0; i<6; i++) {
+            particles.push({
+                x: enemy.x, y: enemy.y,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                alpha: 1,
+                color: enemy.color
+            });
+        }
+
+        const idx = enemies.indexOf(enemy);
+        if (idx > -1) enemies.splice(idx, 1);
+
+        if (childIdx !== null) {
+            // Spawn layered sub-bloon at the same position along path
+            createBloon(childIdx, enemy.x, enemy.y, enemy.targetNode);
+        }
+        updateUI();
+        return true;
+    }
+    return false;
+}
+
+// Explosive splash logic for bomb shooters
+function explode(x, y, radius) {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        if (Math.hypot(e.x - x, e.y - y) <= radius) {
+            damageBloon(e, 1);
+        }
+    }
+    // Explosion Ring Particle
+    particles.push({ x, y, radius: 10, maxRadius: radius, type: 'shockwave', alpha: 1 });
+}
+
+// Game Core Cycle
+function updateAndRender() {
+    if (lives <= 0) {
+        ctx.fillStyle = "rgba(10,10,25,0.85)";
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = "#ff4a6b";
+        ctx.font = "bold 46px sans-serif";
+        ctx.fillText("DEFEATED", canvas.width/2 - 120, canvas.height/2);
+        return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Map Track Road
+    ctx.strokeStyle = '#df9c57';
+    ctx.lineWidth = 36;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for(let i=1; i<path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+
+    // Draw Track Border Lines
+    ctx.strokeStyle = '#c68343';
+    ctx.lineWidth = 40;
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for(let i=1; i<path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Draw Tower Selection Placement Range Indicator Ring
+    if (activeShopSelection) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(mouseX, mouseY, TOWER_TYPES[activeShopSelection].range, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // Draw Placed Selected Tower Range Ring
+    if (selectedPlacedTower) {
+        ctx.fillStyle = "rgba(0, 255, 240, 0.08)";
+        ctx.strokeStyle = "rgba(0, 255, 240, 0.3)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(selectedPlacedTower.x, selectedPlacedTower.y, selectedPlacedTower.range, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // Move & Draw Enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        let target = path[e.targetNode];
+        let dx = target.x - e.x;
+        let dy = target.y - e.y;
+        let dist = Math.hypot(dx, dy);
+
+        if (dist < e.speed) {
+            e.targetNode++;
+            if (e.targetNode >= path.length) {
+                lives -= BLOON_TYPES[e.typeIndex].damage;
+                enemies.splice(i, 1);
+                if (lives < 0) lives = 0;
+                updateUI();
+                continue;
+            }
+        } else {
+            e.x += (dx / dist) * e.speed;
+            e.y += (dy / dist) * e.speed;
+            e.distanceTraveled += e.speed;
+        }
+
+        // Draw Layered Outline Bloon Body shape
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.typeIndex === 5 ? 16 : 12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Bloon String Tail Knot
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y + 12);
+        ctx.lineTo(e.x - 4, e.y + 17);
+        ctx.lineTo(e.x + 4, e.y + 17);
+        ctx.fill();
+    }
+
+    // Process Monkeys
+    towers.forEach(t => {
+        // Render Monkey Body Graphics
+        ctx.fillStyle = t.color;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 18, 0, Math.PI * 2);
+        ctx.fill();
+        // Inner detail
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (t.lastShot > 0) t.lastShot--;
+
+        if (t.lastShot === 0 && enemies.length > 0) {
+            // Strong target sorting simulation (prioritizing furthest along path distance)
+            let validTargets = enemies.filter(e => Math.hypot(e.x - t.x, e.y - t.y) <= t.range);
+            if (validTargets.length > 0) {
+                validTargets.sort((a, b) => b.distanceTraveled - a.distanceTraveled);
+                let target = validTargets[0];
+
+                projectiles.push({
+                    x: t.x, y: t.y,
+                    target: target,
+                    speed: t.type === 'super' ? 12 : 8,
+                    type: t.type,
+                    sourceTower: t
+                });
+                t.lastShot = t.cooldown;
+            }
+        }
+    });
+
+    // Process Darts & Bombs
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        let p = projectiles[i];
+        
+        // Retarget or vanish if lost target tracker
+        if (!enemies.includes(p.target)) {
+            projectiles.splice(i, 1);
+            continue;
+        }
+
+        let dx = p.target.x - p.x;
+        let dy = p.target.y - p.y;
+        let dist = Math.hypot(dx, dy);
+
+        if (dist < p.speed) {
+            if (p.type === 'bomb') {
+                explode(p.x, p.y, 65);
+                p.sourceTower.kills++;
+            } else {
+                let killed = damageBloon(p.target, 1);
+                if (killed) p.sourceTower.kills++;
+            }
+            projectiles.splice(i, 1);
+        } else {
+            p.x += (dx / dist) * p.speed;
+            p.y += (dy / dist) * p.speed;
+
+            // Projectile rendering aesthetics
+            if (p.type === 'bomb') {
+                ctx.fillStyle = '#111';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (p.type === 'super') {
+                ctx.fillStyle = '#00fff0';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#e2e8f0';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+
+    // Process Decorative Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let pt = particles[i];
+        if (pt.type === 'shockwave') {
+            pt.radius += 3;
+            pt.alpha -= 0.05;
+            ctx.strokeStyle = `rgba(255, 140, 0, ${pt.alpha})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI*2);
+            ctx.stroke();
+            if (pt.alpha <= 0) particles.splice(i, 1);
+        } else {
+            pt.x += pt.vx;
+            pt.y += pt.vy;
+            pt.alpha -= 0.04;
+            ctx.fillStyle = pt.color;
+            ctx.globalAlpha = pt.alpha;
+            ctx.fillRect(pt.x, pt.y, 3, 3);
+            ctx.globalAlpha = 1.0;
+            if (pt.alpha <= 0) particles.splice(i, 1);
+        }
+    }
+
+    requestAnimationFrame(updateAndRender);
+}
+
+updateAndRender();
+</script>
+</body>
+</html>
